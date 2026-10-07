@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+
+// Use the in-memory cache: an open Redis connection from a local .env would keep this file from exiting.
+process.env.REDIS_URL = '';
 const { validateEmail, validatePhone } = require('../src/services/validation');
 const { normalizePhone } = require('../src/services/normalize');
 const { scoreLead, resolveCriteria, WEIGHTS } = require('../src/services/scoring');
