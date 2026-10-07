@@ -1,0 +1,38 @@
+# Render Blueprint for the SaaSquatchLeads API.
+# Postgres: Neon (or Supabase / Render Postgres). Redis: Upstash. Set the secrets in the Render dashboard.
+services:
+  - type: web
+    name: saasquatchleads-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: REDIS_URL
+        sync: false
+      # Company Finder: optional Google Places key (OpenStreetMap works without one)
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      # AI enrichment, plain-English search and outreach drafts (optional; Groq has a free tier)
+      - key: AI_PROVIDER
+        value: groq
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_CONCURRENCY
+        value: "2"
+      - key: AI_MAX_PER_JOB
+        value: "40"
+      - key: CORS_ORIGIN
+        sync: false # e.g. https://saasquatchleads.vercel.app
+      - key: CHECK_WEBSITES
+        value: "true"
+      - key: VALIDATION_CONCURRENCY
+        value: "20"
