@@ -1,0 +1,174 @@
+@import 'tailwindcss';
+
+/* Design tokens: a dark console. Violet for actions, emerald for verified, yellow for "call first". */
+:root {
+  color-scheme: dark;
+  --paper: #090b11;
+  --surface: #11141c;
+  --raised: #1a1e2a;
+  --sunk: #0c0e15;
+  --ink: #eef1f8;
+  --ink-soft: #c3cad9;
+  --muted: #8a93a8;
+  --line: #202533;
+  --line-strong: #323a4e;
+  --accent: #7257ff;
+  --accent-2: #3d74f6;
+  --accent-soft: #a99cff;
+  --pine: #34d399;
+  --pine-wash: rgba(52, 211, 153, 0.12);
+  --amber: #fbbf24;
+  --amber-wash: rgba(251, 191, 36, 0.12);
+  --brick: #f87171;
+  --brick-wash: rgba(248, 113, 113, 0.12);
+  --highlight: #fde047;
+  --highlight-soft: rgba(253, 224, 71, 0.1);
+  --focus: #a99cff;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunk: var(--sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-pine: var(--pine);
+  --color-pine-wash: var(--pine-wash);
+  --color-amber: var(--amber);
+  --color-amber-wash: var(--amber-wash);
+  --color-brick: var(--brick);
+  --color-brick-wash: var(--brick-wash);
+  --color-highlight: var(--highlight);
+  --color-highlight-soft: var(--highlight-soft);
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  background:
+    radial-gradient(900px 520px at 8% -12%, rgba(114, 87, 255, 0.2), transparent 62%),
+    radial-gradient(760px 460px at 100% -6%, rgba(61, 116, 246, 0.14), transparent 60%),
+    radial-gradient(700px 500px at 60% 110%, rgba(52, 211, 153, 0.06), transparent 60%),
+    var(--paper);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(114, 87, 255, 0.45);
+  color: #fff;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Every text field and select shares one look: recessed, with a violet focus ring. */
+input:not([type='checkbox']):not([type='range']):not([type='file']),
+select,
+textarea {
+  background-color: var(--sunk);
+  color: var(--ink);
+  transition:
+    border-color 150ms,
+    box-shadow 150ms;
+}
+input:not([type='checkbox']):not([type='range']):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(114, 87, 255, 0.28);
+}
+::placeholder {
+  color: #5f6880;
+  opacity: 1;
+}
+
+/* Cards: a hairline border plus a faint top sheen so surfaces lift off the background. */
+.card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 120px), var(--surface);
+  box-shadow: 0 24px 60px -32px rgba(0, 0, 0, 0.8);
+}
+
+.gradient-text {
+  background: linear-gradient(100deg, #ffffff 10%, var(--accent-soft) 55%, #6fa0ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Thin, quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Row highlight: the highlighter stroke sits behind the text. */
+.row-selected > td {
+  background: var(--highlight-soft);
+}
+.row-selected > td:first-child {
+  box-shadow: inset 3px 0 0 var(--highlight);
+}
+
+@keyframes sieve-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.sieve-bar {
+  transform-origin: left;
+  animation: sieve-fill 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sieve-bar,
+  .rise {
+    animation: none;
+  }
+  * {
+    transition: none !important;
+  }
+}
