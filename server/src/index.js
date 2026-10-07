@@ -6,6 +6,7 @@ const { pool } = require('./db');
 async function main() {
   // Schema is idempotent, so applying it on boot keeps deploys one-step.
   await migrate();
+  await require('./db/repo').clearInterruptedAiPasses();
   const app = createApp();
   const server = app.listen(config.port, () => {
     console.log(`SaaSquatchLeads API listening on http://localhost:${config.port}`);

@@ -272,6 +272,24 @@ async function updateScores(scored) {
   );
 }
 
+/** Fields the background AI pass may fill in on an already-saved lead. */
+const AI_UPDATABLE = ['ownerName', 'ownerTitle', 'yearFounded', 'employees', 'revenue', 'revenueEstimated', 'signals', 'aiSummary', 'enrichment', 'score', 'tier', 'scoreReasons'];
+
+async function updateLeadEnrichment(lead) {
+  const values = [lead.id];
+  const sets = AI_UPDATABLE.map((f) => {
+    const v = lead[f];
+    values.push(JSON_FIELDS.has(f) ? JSON.stringify(v ?? (f in JSON_DEFAULTS ? JSON_DEFAULTS[f] : [])) : v ?? null);
+    return `${LEAD_COLUMNS[f]} = $${values.length}`;
+  });
+  await query(`UPDATE leads SET ${sets.join(', ')} WHERE id = $1`, values);
+}
+
+/** A restart ends any background AI pass; clear the flag so the UI stops waiting for it. */
+async function clearInterruptedAiPasses() {
+  await query(`UPDATE uploads SET stage = 'done' WHERE status = 'ready' AND stage = 'analyzing'`);
+}
+
 async function getLead(id) {
   const { rows } = await query(`SELECT * FROM leads WHERE id = $1`, [id]);
   return mapRow(rows[0]);
@@ -292,6 +310,8 @@ module.exports = {
   listLeads,
   allLeads,
   updateScores,
+  updateLeadEnrichment,
+  clearInterruptedAiPasses,
   getLead,
   saveOutreach,
   mapRow,

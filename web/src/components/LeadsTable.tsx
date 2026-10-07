@@ -30,6 +30,7 @@ export function LeadsTable({
   onExpand,
   loading,
   aiAvailable,
+  aiRunning,
   onOutreach,
 }: {
   leads: Lead[];
@@ -43,6 +44,7 @@ export function LeadsTable({
   onExpand: (id: string | null) => void;
   loading: boolean;
   aiAvailable: boolean;
+  aiRunning: boolean;
   onOutreach: (id: string, o: Outreach) => void;
 }) {
   const pageIds = leads.map((l) => l.id);
@@ -220,7 +222,7 @@ export function LeadsTable({
                 {open && (
                   <tr className="border-b border-line">
                     <td colSpan={row.getVisibleCells().length} className="p-0">
-                      <LeadDetail lead={row.original} aiAvailable={aiAvailable} onOutreach={onOutreach} />
+                      <LeadDetail lead={row.original} aiAvailable={aiAvailable} aiRunning={aiRunning} onOutreach={onOutreach} />
                     </td>
                   </tr>
                 )}

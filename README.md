@@ -157,11 +157,14 @@ flowchart LR
 
 ```
 CSV:     parse + map columns ─┐
-Search:  Google Places ∥ OSM ─┤→ dedupe (union-find, cross-source) → crawl sites → Claude reads sites
-                              │  → validate (cached, concurrent) → score → bulk insert
+Search:  Google Places ∥ OSM ─┤→ dedupe (union-find, cross-source) → crawl sites
+                              │  → validate (cached, concurrent) → score → bulk insert → list is ready
+                              └→ then in the background: AI reads each site → lead updated and re-scored
 ```
 
 `POST /api/search` works the same way and also returns `202` immediately.
+
+**The list never waits for the AI.** AI calls are rate limited on free tiers (about 25 a minute), so they run after the list is shown: a typical search is usable in well under a minute, and each lead's summary, owner, signals and score update as its site is read. The results page shows "AI is reading websites: 4 of 12" while this runs.
 
 Each stage writes its progress to the `uploads` row. The UI polls `GET /api/uploads/:id` every 800 ms.
 

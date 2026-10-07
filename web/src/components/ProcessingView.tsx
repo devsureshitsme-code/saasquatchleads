@@ -10,12 +10,10 @@ type Stage = { id: Upload['stage']; label: string; unit?: string };
 function stagesFor(u: Upload): Stage[] {
   const q = u.query || {};
   const crawl = u.source === 'search' ? q.crawl !== false : !!q.crawl;
-  const useAi = u.source === 'search' ? q.ai !== false : !!q.useAi;
   return [
     u.source === 'search' ? { id: 'discovering', label: 'Searching for businesses' } : { id: 'parsing', label: 'Reading columns' },
     { id: 'deduping', label: 'Merging duplicates' },
     ...(crawl ? [{ id: 'crawling' as const, label: 'Reading company websites', unit: 'websites read' }] : []),
-    ...(crawl && useAi ? [{ id: 'analyzing' as const, label: 'AI is reading each site', unit: 'companies analyzed' }] : []),
     { id: 'validating', label: 'Checking emails, phones and websites', unit: 'businesses checked' },
     { id: 'scoring', label: 'Scoring acquisition fit' },
     { id: 'saving', label: 'Saving' },

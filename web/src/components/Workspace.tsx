@@ -54,9 +54,9 @@ export function Workspace({
   const [search, setSearch] = useState('');
   const reqId = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     const id = ++reqId.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const res = await api.leads(upload.id, filters);
       if (id === reqId.current) setData({ leads: res.leads, total: res.total });
@@ -70,6 +70,18 @@ export function Workspace({
   useEffect(() => {
     load();
   }, [load]);
+
+  // The AI keeps reading sites after the list is shown; pull in its updates without dimming the table.
+  const aiRunning = upload.stage === 'analyzing';
+  const aiDone = upload.progressDone;
+  const firstAiTick = useRef(true);
+  useEffect(() => {
+    if (firstAiTick.current) {
+      firstAiTick.current = false;
+      return;
+    }
+    load(true);
+  }, [aiRunning, aiDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced search box
   useEffect(() => {
@@ -122,6 +134,14 @@ export function Workspace({
             <SlidersHorizontal className="size-3.5" aria-hidden />
             Edit thesis
           </Button>
+          {aiRunning && (
+            <p className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-[13px] text-accent-soft" role="status">
+              <Spinner className="size-3.5" />
+              <span>
+                AI is reading websites: <span className="num font-semibold">{upload.progressDone}</span> of <span className="num font-semibold">{upload.progressTotal}</span>. Scores update as it goes.
+              </span>
+            </p>
+          )}
           <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
             <label className="relative flex-1 sm:w-72 sm:flex-none">
               <span className="sr-only">Search leads</span>
@@ -207,6 +227,7 @@ export function Workspace({
               onExpand={setExpanded}
               loading={loading}
               aiAvailable={aiAvailable}
+              aiRunning={aiRunning}
               onOutreach={(id: string, o: Outreach) => setData((d) => ({ ...d, leads: d.leads.map((l) => (l.id === id ? { ...l, outreach: o } : l)) }))}
             />
           )}

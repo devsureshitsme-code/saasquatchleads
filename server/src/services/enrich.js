@@ -1,6 +1,7 @@
 /**
- * Enrichment: crawl each company's website, optionally ask Claude to read it, and fill
- * gaps in the lead. Existing data is never overwritten. Every filled field records where
+ * Enrichment: crawl each company's website and fill gaps in the lead with rule-based
+ * extraction. The AI read happens afterwards, in the background (see pipeline.js), so the
+ * list is never held up by rate-limited AI calls. Existing data is never overwritten. Every filled field records where
  * it came from (provenance), so the UI can say "owner found on website" vs "from Google".
  */
 const pLimit = require('p-limit');
@@ -11,6 +12,7 @@ const { normalizePhone } = require('./normalize');
 const CRAWL_CONCURRENCY = 8;
 // Free AI tiers are rate limited: keep concurrency low and cap AI calls per job (the rest use rule-based extraction).
 const AI_CONCURRENCY = () => Number(process.env.AI_CONCURRENCY) || 2;
+const MIN_AI_TEXT = 200; // less text than this isn't worth an AI call
 const AI_MAX_PER_JOB = () => Number(process.env.AI_MAX_PER_JOB) || 40;
 
 const uniq = (arr) => [...new Set(arr.filter(Boolean))];
@@ -97,9 +99,10 @@ function applyEnrichment(lead, crawlRes, aiRes) {
 
 /**
  * @param {Array} leads deduped leads
- * @param {{ crawl?: boolean, useAi?: boolean, onStage?: (stage, done, total) => void }} opts
+ * @param {{ crawl?: boolean, onStage?: (stage, done, total) => void }} opts
+ * @returns {{ leads, stats, crawlResults }} crawlResults (domain -> crawl) feeds the AI pass
  */
-async function enrichAll(leads, { crawl = true, useAi = true, onStage = () => {} } = {}) {
+async function enrichAll(leads, { crawl = true, onStage = () => {} } = {}) {
   const stats = { crawled: 0, crawlFailed: 0, blockedByRobots: 0, aiEnriched: 0, aiFailed: 0, fieldsFilled: {} };
   const crawlResults = new Map();
 
@@ -123,44 +126,24 @@ async function enrichAll(leads, { crawl = true, useAi = true, onStage = () => {}
     );
   }
 
-  // Pass 2: Claude reads the crawled text
-  const aiResults = new Map();
-  const aiErrors = new Map();
-  if (useAi && ai.available()) {
-    const readable = leads
-      .filter((l) => l.domain && crawlResults.get(l.domain)?.ok && (crawlResults.get(l.domain).text || '').length > 200)
-      // When capped, spend AI calls on the most established businesses first.
-      .sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0))
-      .slice(0, AI_MAX_PER_JOB());
-    stats.aiSkippedByCap = Math.max(0, leads.filter((l) => l.domain && crawlResults.get(l.domain)?.ok).length - readable.length);
-    const limit = pLimit(AI_CONCURRENCY());
-    let done = 0;
-    onStage('analyzing', 0, readable.length);
-    await Promise.all(
-      readable.map((l) =>
-        limit(async () => {
-          try {
-            aiResults.set(l.domain, await ai.enrichCompany(l, crawlResults.get(l.domain)));
-            stats.aiEnriched++;
-          } catch (err) {
-            aiErrors.set(l.domain, err.message);
-            stats.aiFailed++;
-          }
-          onStage('analyzing', ++done, readable.length);
-        }),
-      ),
-    );
-  }
-
   const enriched = leads.map((l) => {
-    const base = aiErrors.has(l.domain) ? { ...l, enrichment: { aiError: aiErrors.get(l.domain) } } : l;
-    const out = applyEnrichment(base, crawlResults.get(l.domain), aiResults.get(l.domain));
+    const out = applyEnrichment(l, crawlResults.get(l.domain));
     for (const f of Object.keys(out.enrichment.provenance)) {
       if (!l.enrichment?.provenance?.[f]) stats.fieldsFilled[f] = (stats.fieldsFilled[f] || 0) + 1;
     }
     return out;
   });
-  return { leads: enriched, stats };
+  return { leads: enriched, stats, crawlResults };
 }
 
-module.exports = { enrichAll, applyEnrichment };
+/** Leads whose site was read and has enough text for the AI, best first, capped per job. */
+function aiCandidates(leads, crawlResults) {
+  const readable = leads.filter((l) => l.domain && crawlResults.get(l.domain)?.ok);
+  const picked = readable
+    .filter((l) => (crawlResults.get(l.domain).text || '').length > MIN_AI_TEXT)
+    .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.reviewCount || 0) - (a.reviewCount || 0))
+    .slice(0, AI_MAX_PER_JOB());
+  return { picked, skippedByCap: Math.max(0, readable.length - picked.length) };
+}
+
+module.exports = { enrichAll, applyEnrichment, aiCandidates, AI_CONCURRENCY };

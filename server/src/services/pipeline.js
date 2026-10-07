@@ -3,8 +3,11 @@
  *
  *   CSV upload:      parse ─┐
  *   Company search:  discover (Google Places / OpenStreetMap) ─┤
- *                                                             ├─> dedupe → crawl websites → AI read → validate → score → save
+ *                                                             ├─> dedupe → crawl websites → validate → score → save
+ *                                                             └─> then, in the background: AI reads each site → re-score
  *
+ * The list is marked ready as soon as it is saved. The AI calls are rate limited (free
+ * tiers allow ~25 a minute), so they run afterwards and update each lead as they finish.
  * Each stage writes its name and progress to the uploads row so the UI can show a live
  * progress bar. (For very large jobs this is where a BullMQ worker would slot in; see README.)
  */
@@ -13,8 +16,9 @@ const config = require('../config');
 const { parseLeadsCsv } = require('./csv');
 const { dedupe } = require('./dedup');
 const { validateAll } = require('./validation');
+const pLimit = require('p-limit');
 const { scoreAll } = require('./scoring');
-const { enrichAll } = require('./enrich');
+const { enrichAll, applyEnrichment, aiCandidates, AI_CONCURRENCY } = require('./enrich');
 const { discover } = require('./discovery');
 const ai = require('./ai');
 
@@ -37,10 +41,12 @@ async function runPipeline(uploadId, rawLeads, { criteriaInput, crawl, useAi, ex
 
   let leads = deduped.records;
   let enrichStats = null;
-  if (crawl || useAi) {
-    const r = await enrichAll(leads, { crawl, useAi, onStage: progress });
+  let crawlResults = new Map();
+  if (crawl) {
+    const r = await enrichAll(leads, { crawl, onStage: progress });
     leads = r.leads;
     enrichStats = r.stats;
+    crawlResults = r.crawlResults;
   }
 
   progress('validating', 0, leads.length);
@@ -52,13 +58,56 @@ async function runPipeline(uploadId, rawLeads, { criteriaInput, crawl, useAi, ex
   await repo.updateUpload(uploadId, { stage: 'saving' });
   await repo.insertLeads(uploadId, scored);
 
-  await repo.updateUpload(uploadId, {
-    status: 'ready',
-    stage: 'done',
-    criteria,
-    processingMs: Date.now() - started,
-    stats: { ...extraStats, dedup: deduped.stats, enrichment: enrichStats, validation: validated.stats },
-  });
+  const stats = { ...extraStats, dedup: deduped.stats, enrichment: enrichStats, validation: validated.stats };
+  await repo.updateUpload(uploadId, { status: 'ready', stage: 'done', criteria, processingMs: Date.now() - started, stats });
+
+  if (useAi && crawl && ai.available()) {
+    runAiPass(uploadId, crawlResults, stats).catch((err) => console.error(`[pipeline] ${uploadId} AI pass failed:`, err.message));
+  }
+}
+
+/**
+ * Background AI pass over an upload that is already ready. Each lead is updated and
+ * re-scored as soon as its site has been read; the UI polls while stage is 'analyzing'.
+ */
+async function runAiPass(uploadId, crawlResults, stats) {
+  const { picked, skippedByCap } = aiCandidates(await repo.allLeads(uploadId), crawlResults);
+  if (!picked.length) return;
+  const limit = pLimit(AI_CONCURRENCY());
+  let done = 0;
+  let enriched = 0;
+  let failed = 0;
+  await repo.updateUpload(uploadId, { stage: 'analyzing', progressDone: 0, progressTotal: picked.length });
+  try {
+    await Promise.all(
+      picked.map((lead) =>
+        limit(async () => {
+          const crawlRes = crawlResults.get(lead.domain);
+          try {
+            const aiRes = await ai.enrichCompany(lead, crawlRes);
+            // The AI reads context better than the owner regex, so its name wins over a website guess.
+            const guessed = lead.enrichment?.provenance?.ownerName === 'website' && aiRes.owner_name;
+            const base = guessed ? { ...lead, ownerName: null, ownerTitle: null } : lead;
+            // Read the thesis fresh: the user may have edited it while this pass was running.
+            const { criteria } = await repo.getUpload(uploadId);
+            const [scored] = scoreAll([applyEnrichment(base, crawlRes, aiRes)], criteria).leads;
+            await repo.updateLeadEnrichment(scored);
+            enriched++;
+          } catch (err) {
+            failed++;
+            await repo.updateLeadEnrichment({ ...lead, enrichment: { ...lead.enrichment, aiError: err.message } }).catch(() => {});
+          }
+          // Awaited (unlike stage progress) so a late write can never land after stage is set to 'done'.
+          await repo.updateUpload(uploadId, { progressDone: ++done }).catch(() => {});
+        }),
+      ),
+    );
+  } finally {
+    await repo.updateUpload(uploadId, {
+      stage: 'done',
+      stats: { ...stats, enrichment: { ...stats.enrichment, aiEnriched: enriched, aiFailed: failed, aiSkippedByCap: skippedByCap } },
+    });
+  }
 }
 
 async function fail(uploadId, err, started) {

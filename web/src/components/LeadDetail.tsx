@@ -28,13 +28,22 @@ function Prov({ lead, field }: { lead: Lead; field: string }) {
 }
 
 /** Expanded row: who they are, why the score, what the checks found, and an outreach draft. */
-export function LeadDetail({ lead, aiAvailable, onOutreach }: { lead: Lead; aiAvailable: boolean; onOutreach: (id: string, o: Outreach) => void }) {
+export function LeadDetail({ lead, aiAvailable, aiRunning = false, onOutreach }: { lead: Lead; aiAvailable: boolean; aiRunning?: boolean; onOutreach: (id: string, o: Outreach) => void }) {
   const e = lead.enrichment || {};
   const hasProfile = lead.aiSummary || lead.signals?.length || e.services?.length || lead.ownerName;
   const hasNarrative = lead.aiSummary || e.acquisitionNotes || lead.signals?.length > 0;
 
+  // Only sites that were actually read are queued for the AI.
+  const aiPending = aiRunning && !lead.aiSummary && !e.aiError && (e.pagesCrawled?.length || 0) > 0;
+
   return (
     <div className="bg-sunk">
+      {aiPending && (
+        <p className="flex items-center gap-2 border-b border-line px-4 py-3 text-[13px] text-accent-soft sm:px-6" role="status">
+          <Spinner className="size-3.5" />
+          AI is still working through the list. This company’s summary and signals will appear here when its site has been read.
+        </p>
+      )}
       {hasProfile && (
         <section className="border-b border-line px-4 py-5 sm:px-6">
           <div className={cx('grid gap-6', hasNarrative && 'lg:grid-cols-[1.4fr_1fr]')}>

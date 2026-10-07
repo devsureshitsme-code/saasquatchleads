@@ -57,12 +57,13 @@ export function App() {
     refresh();
   }, [uploadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll while processing
+  // Poll while processing, and more slowly while the AI is still reading sites behind a ready list
+  const aiRunning = upload?.status === 'ready' && upload.stage === 'analyzing';
   useEffect(() => {
-    if (!upload || upload.status !== 'processing') return;
-    const t = setInterval(refresh, 800);
+    if (!upload || (upload.status !== 'processing' && !aiRunning)) return;
+    const t = setInterval(refresh, aiRunning ? 2500 : 800);
     return () => clearInterval(t);
-  }, [upload, refresh]);
+  }, [upload, refresh, aiRunning]);
 
   useEffect(() => {
     if (upload?.status === 'ready') api.uploads().then((r) => setRecent(r.uploads)).catch(() => {});
